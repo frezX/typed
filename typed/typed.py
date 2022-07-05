@@ -7,6 +7,7 @@ from typed.decorator_types import *
 class TypedDecorator(object):
     def __init__(self, func):
         self._func = func
+        self._func_name = self._func.__name__
         self._argspec = getfullargspec(self._func)
         self._annotations = self._argspec.annotations
         self._func_args = self._argspec.args
@@ -59,19 +60,27 @@ class TypedDecorator(object):
                     if type_arg not in types_
                 }
                 if len(is_all_correct):
-                    raise Warning(f'{_generic_args} in {kwarg} has no {" and ".join(is_all_correct)} type')
+                    raise Warning(f'{self._func_name} {_generic_args} in {kwarg} has no {" and ".join(is_all_correct)} type')
             for arg, _generic_type in zip(args, _generic_types):
                 if type(_generic_type) == GenericAlias:
                     self._check_generic(kwarg, arg, _generic_type)
                 else:
                     if _generic_type == AnyType: continue
-                    assert isinstance(arg, _generic_type), \
-                        f'{_generic_args} in {kwarg} takes {self._get_type_name(_generic_type)}, ' \
-                        f'not {self._get_type_name(type(arg))}'
+                    if _generic_type == Iterator: continue
+                    try:
+                        assert isinstance(arg, _generic_type), \
+                            f'{self._func_name} {_generic_args} in {kwarg} takes {self._get_type_name(_generic_type)}, ' \
+                            f'not {self._get_type_name(type(arg))}'
+                    except TypeError as e:
+                        print(self._func_name, e)
             _generic_args = self._get_generic_type(_generic_args)
-        assert isinstance(args, _generic_args), \
-            f'{kwarg} - parameter must be an {self._get_type_name(_generic_args)}, ' \
-            f'not a {self._get_type_name(type(args))}.'
+        if _generic_args == Iterator: return
+        try:
+            assert isinstance(args, _generic_args), \
+                f'{self._func_name}  {kwarg} - parameter must be an {self._get_type_name(_generic_args)}, ' \
+                f'not a {self._get_type_name(type(args))}.'
+        except TypeError as e:
+            print(self._func_name, e, args, _generic_args)
 
     def check_anotations(self, *args, **kwargs):
         for arg, func_arg in zip(args, self._func_args):
@@ -84,16 +93,20 @@ class TypedDecorator(object):
                 continue
             status = True if func_arg in self._annotations else False
             if status:
-                raise Warning(f'{func_arg}({arg}) - this argument is not conveyed explicitly.')
+                raise Warning(f'{self._func_name}: {func_arg}({arg}) - this argument is not conveyed explicitly.')
             else:
                 raise Warning(
-                    f'{func_arg} - the argument has no annotation type. '
+                    f'{self._func_name} {func_arg} - the argument has no annotation type. '
                     f'In parameter, data type is a {self._get_type_name(type(arg))}.'
                 )
         if len(kwargs) > len(self._func_args):
-            raise Warning(f'The number of parameters passed is more than the function accepts')
+            raise Warning(f'{self._func_name} The number of parameters passed is more than the function accepts')
         for kwarg, func_arg in zip(kwargs, self._func_args):
-            if kwarg != func_arg: raise Warning('ERROR')
+            if kwarg != func_arg:
+                if not self._defaults:
+                    raise Warning(f'{self._func_name} ERROR')
+                else:
+                    continue
             status = True if kwarg in self._annotations else False
             arg = kwargs[kwarg]
             if status:
@@ -101,7 +114,7 @@ class TypedDecorator(object):
                 self._check_generic(kwarg, arg, _annotation_arg)
             else:
                 raise Warning(
-                    f'{kwarg} - argument has no annotation type. '
+                    f'{self._func_name} {kwarg} - argument has no annotation type. '
                     f'In parameter, data type is a {self._get_type_name(type(arg))}.'
                 )
 
