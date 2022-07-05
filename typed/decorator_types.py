@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Iterator
 
 
 class Types:
@@ -11,6 +11,7 @@ class Types:
 
 AnyType = type(Any)
 NoneType = type(None)
+Iterator = Iterator[str]
 EllipsisType = type(...)
 
 ClassType = type(Types)
